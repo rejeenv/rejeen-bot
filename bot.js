@@ -128,23 +128,23 @@ client.on('interactionCreate', async interaction => {
       .setCustomId(`rejeen_modal_${user.id}_${user.username}`)
       .setTitle(`Zamówienie dla ${user.username}`);
 
-    const rockstarInput = new TextInputBuilder()
+const rockstarInput = new TextInputBuilder()
       .setCustomId('rockstar')
-      .setLabel('Rockstar — email:haslo:2fa (każde konto nowa linia)')
+      .setLabel('Rockstar: email:haslo:2fa')
       .setStyle(TextInputStyle.Paragraph)
       .setPlaceholder('email@gmail.com:haslo123:klucz2fa\nemail2@gmail.com:haslo456:klucz2fa2')
       .setRequired(false);
 
     const steamInput = new TextInputBuilder()
       .setCustomId('steam')
-      .setLabel('Steam — email:haslo (każde konto nowa linia)')
+      .setLabel('Steam: email:haslo')
       .setStyle(TextInputStyle.Paragraph)
       .setPlaceholder('email@gmail.com:haslo123\nemail2@gmail.com:haslo456')
       .setRequired(false);
 
     const discordInput = new TextInputBuilder()
       .setCustomId('discord')
-      .setLabel('Discord — tokeny (każdy token nowa linia)')
+      .setLabel('Discord: tokeny (każdy w nowej linii)')
       .setStyle(TextInputStyle.Paragraph)
       .setPlaceholder('token1\ntoken2\ntoken3')
       .setRequired(false);
