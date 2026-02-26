@@ -311,7 +311,7 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ embeds: [embed] });
   }
 
-  // ── /comet ────────────────────────────────────────────────────────────────
+// ── /comet ────────────────────────────────────────────────────────────────
   if (interaction.commandName === 'comet') {
     const code = interaction.options.getString('code');
 
@@ -325,16 +325,12 @@ client.on('interactionCreate', async interaction => {
         body: JSON.stringify({ code }),
       });
 
-      if (res.ok) {
-        return interaction.reply({ content: `✅ Kod comet.lua zaktualizowany na: \`${code}\``, ephemeral: true });
-      } else {
-        return interaction.reply({ content: '❌ Błąd aktualizacji kodu.', ephemeral: true });
-      }
+      const data = await res.json();
+      return interaction.reply({ content: `Status: ${res.status} | Odpowiedź: ${JSON.stringify(data)} | SITE_URL: ${SITE_URL}`, ephemeral: true });
     } catch(e) {
-      return interaction.reply({ content: `❌ Błąd: ${e.message}`, ephemeral: true });
+      return interaction.reply({ content: `❌ Błąd fetch: ${e.message} | SITE_URL: ${SITE_URL}`, ephemeral: true });
     }
   }
-});
 
 await registerCommand();
 client.login(TOKEN);
