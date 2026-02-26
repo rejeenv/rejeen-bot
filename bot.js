@@ -311,26 +311,26 @@ client.on('interactionCreate', async interaction => {
     return interaction.editReply({ embeds: [embed] });
   }
 
-// ── /comet ────────────────────────────────────────────────────────────────
-  if (interaction.commandName === 'comet') {
-    const code = interaction.options.getString('code');
+if (interaction.commandName === 'comet') {
+  const code = interaction.options.getString('code');
 
-    try {
-      const res = await fetch(`${SITE_URL}/api/comet`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'x-bot-secret': process.env.BOT_SECRET,
-        },
-        body: JSON.stringify({ code }),
-      });
+  try {
+    const res = await fetch(`${SITE_URL}/api/comet`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-bot-secret': process.env.BOT_SECRET,
+      },
+      body: JSON.stringify({ code }),
+    });
 
-      const data = await res.json();
-      return interaction.reply({ content: `Status: ${res.status} | Odpowiedź: ${JSON.stringify(data)} | SITE_URL: ${SITE_URL}`, ephemeral: true });
-    } catch(e) {
-      return interaction.reply({ content: `❌ Błąd fetch: ${e.message} | SITE_URL: ${SITE_URL}`, ephemeral: true });
-    }
+    const data = await res.json();
+    return interaction.reply({ content: `Status: ${res.status} | Odpowiedź: ${JSON.stringify(data)} | SITE_URL: ${SITE_URL}`, ephemeral: true });
+  } catch(e) {
+    return interaction.reply({ content: `❌ Błąd fetch: ${e.message} | SITE_URL: ${SITE_URL}`, ephemeral: true });
   }
+}
+});
 
 await registerCommand();
 client.login(TOKEN);
