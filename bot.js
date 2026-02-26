@@ -4,12 +4,12 @@ const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const REDIS_URL = process.env.KV_REST_API_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN;
+const SITE_URL = process.env.SITE_URL || 'https://rejeen.xyz';
 
 console.log('TOKEN present:', !!TOKEN, '| length:', TOKEN?.length);
 console.log('CLIENT_ID present:', !!CLIENT_ID);
 console.log('REDIS_URL present:', !!REDIS_URL);
 
-const SITE_URL = 'https://rejeen.xyz';
 const EXPIRE_SECONDS = 60 * 60 * 24 * 3;
 
 async function redisSet(key, value) {
@@ -112,13 +112,22 @@ const commandZamowienia = new SlashCommandBuilder()
   .setName('zamowienia')
   .setDescription('Pokaż listę aktywnych zamówień');
 
+const commandComet = new SlashCommandBuilder()
+  .setName('comet')
+  .setDescription('Ustaw kod invite dla comet.lua')
+  .addStringOption(opt =>
+    opt.setName('code')
+      .setDescription('Nowy kod invite')
+      .setRequired(true)
+  );
+
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 async function registerCommand() {
   try {
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, process.env.DISCORD_GUILD_ID),
-      { body: [commandRejeen.toJSON(), commandUsun.toJSON(), commandZamowienia.toJSON()] }
+      { body: [commandRejeen.toJSON(), commandUsun.toJSON(), commandZamowienia.toJSON(), commandComet.toJSON()] }
     );
     console.log('✅ Komendy zarejestrowane');
   } catch (err) {
@@ -269,7 +278,6 @@ client.on('interactionCreate', async interaction => {
       }
     }
 
-    // Sortuj od najnowszego
     orders.sort((a, b) => b.orderId - a.orderId);
 
     const embed = new EmbedBuilder()
@@ -287,9 +295,8 @@ client.on('interactionCreate', async interaction => {
       return `**#${o.orderId}** • ${typ} • <@${o.userId}> (${o.username}) • wygasa za ${timeStr}`;
     });
 
-    // Discord ma limit 4096 znaków w opisie — podziel jeśli dużo zamówień
-    const chunks = [];
     let current = '';
+    const chunks = [];
     for (const line of lines) {
       if ((current + '\n' + line).length > 4000) {
         chunks.push(current);
@@ -301,8 +308,31 @@ client.on('interactionCreate', async interaction => {
     if (current) chunks.push(current);
 
     embed.setDescription(chunks[0]);
-
     return interaction.editReply({ embeds: [embed] });
+  }
+
+  // ── /comet ────────────────────────────────────────────────────────────────
+  if (interaction.commandName === 'comet') {
+    const code = interaction.options.getString('code');
+
+    try {
+      const res = await fetch(`${SITE_URL}/api/comet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': process.env.BOT_SECRET,
+        },
+        body: JSON.stringify({ code }),
+      });
+
+      if (res.ok) {
+        return interaction.reply({ content: `✅ Kod comet.lua zaktualizowany na: \`${code}\``, ephemeral: true });
+      } else {
+        return interaction.reply({ content: '❌ Błąd aktualizacji kodu.', ephemeral: true });
+      }
+    } catch(e) {
+      return interaction.reply({ content: `❌ Błąd: ${e.message}`, ephemeral: true });
+    }
   }
 });
 
