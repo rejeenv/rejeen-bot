@@ -47,9 +47,16 @@ async function redisGet(key) {
   return rawValue;
 }
 
-// ── Budowanie komend ─────────────────────────────────────────────────────────
+async function redisKeys(pattern) {
+  const res = await fetch(`${REDIS_URL}/keys/${pattern}`, {
+    headers: { Authorization: `Bearer ${REDIS_TOKEN}` },
+  });
+  const data = await res.json();
+  return data.result || [];
+}
 
-// Discord: typ + uzytkownik + 21 tokenów = 23 opcje
+// ── Komendy ──────────────────────────────────────────────────────────────────
+
 const commandRejeen = new SlashCommandBuilder()
   .setName('rejeen')
   .setDescription('Utwórz zamówienie dla klienta')
@@ -68,7 +75,6 @@ const commandRejeen = new SlashCommandBuilder()
       .setDescription('Klient (@user)')
       .setRequired(true)
   )
-  // Rockstar / Steam: do 5 kont (email+haslo+klucz = 3 opcje * 5 = 15 + 2 = 17)
   .addStringOption(opt => opt.setName('email1').setDescription('Rockstar/Steam: Email 1').setRequired(false))
   .addStringOption(opt => opt.setName('haslo1').setDescription('Rockstar/Steam: Hasło 1').setRequired(false))
   .addStringOption(opt => opt.setName('klucz1').setDescription('Rockstar: Klucz 2FA 1').setRequired(false))
@@ -84,7 +90,6 @@ const commandRejeen = new SlashCommandBuilder()
   .addStringOption(opt => opt.setName('email5').setDescription('Rockstar/Steam: Email 5').setRequired(false))
   .addStringOption(opt => opt.setName('haslo5').setDescription('Rockstar/Steam: Hasło 5').setRequired(false))
   .addStringOption(opt => opt.setName('klucz5').setDescription('Rockstar: Klucz 2FA 5').setRequired(false))
-  // Discord: do 8 tokenów (15 opcji wyżej + 2 + 8 = 25)
   .addStringOption(opt => opt.setName('token1').setDescription('Discord: Token 1').setRequired(false))
   .addStringOption(opt => opt.setName('token2').setDescription('Discord: Token 2').setRequired(false))
   .addStringOption(opt => opt.setName('token3').setDescription('Discord: Token 3').setRequired(false))
@@ -103,13 +108,17 @@ const commandUsun = new SlashCommandBuilder()
       .setRequired(true)
   );
 
+const commandZamowienia = new SlashCommandBuilder()
+  .setName('zamowienia')
+  .setDescription('Pokaż listę aktywnych zamówień');
+
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 async function registerCommand() {
   try {
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, process.env.DISCORD_GUILD_ID),
-      { body: [commandRejeen.toJSON(), commandUsun.toJSON()] }
+      { body: [commandRejeen.toJSON(), commandUsun.toJSON(), commandZamowienia.toJSON()] }
     );
     console.log('✅ Komendy zarejestrowane');
   } catch (err) {
@@ -237,6 +246,63 @@ client.on('interactionCreate', async interaction => {
 
     await redisDel(`order:${orderId}`);
     return interaction.reply({ content: `✅ Zamówienie \`${orderId}\` zostało usunięte.`, ephemeral: true });
+  }
+
+  // ── /zamowienia ───────────────────────────────────────────────────────────
+  if (interaction.commandName === 'zamowienia') {
+    await interaction.deferReply({ ephemeral: true });
+
+    const keys = await redisKeys('order:*');
+
+    if (keys.length === 0) {
+      return interaction.editReply({ content: '📭 Brak aktywnych zamówień.' });
+    }
+
+    const typeLabels = { rockstar: '🎮 Rockstar', steam: '🎮 Steam', discord: '💬 Discord' };
+    const orders = [];
+
+    for (const key of keys) {
+      const order = await redisGet(key);
+      if (order) {
+        const orderId = key.replace('order:', '');
+        orders.push({ orderId, ...order });
+      }
+    }
+
+    // Sortuj od najnowszego
+    orders.sort((a, b) => b.orderId - a.orderId);
+
+    const embed = new EmbedBuilder()
+      .setColor(0xc8ff00)
+      .setTitle(`📦 Aktywne zamówienia (${orders.length})`)
+      .setTimestamp();
+
+    const lines = orders.map(o => {
+      const typ = typeLabels[o.typ] || o.typ;
+      const expiresAt = new Date(o.expiresAt);
+      const diff = expiresAt - new Date();
+      const daysLeft = Math.floor(diff / 1000 / 60 / 60 / 24);
+      const hoursLeft = Math.floor(diff / 1000 / 60 / 60);
+      const timeStr = daysLeft > 0 ? `${daysLeft}d` : `${hoursLeft}h`;
+      return `**#${o.orderId}** • ${typ} • <@${o.userId}> (${o.username}) • wygasa za ${timeStr}`;
+    });
+
+    // Discord ma limit 4096 znaków w opisie — podziel jeśli dużo zamówień
+    const chunks = [];
+    let current = '';
+    for (const line of lines) {
+      if ((current + '\n' + line).length > 4000) {
+        chunks.push(current);
+        current = line;
+      } else {
+        current = current ? current + '\n' + line : line;
+      }
+    }
+    if (current) chunks.push(current);
+
+    embed.setDescription(chunks[0]);
+
+    return interaction.editReply({ embeds: [embed] });
   }
 });
 
