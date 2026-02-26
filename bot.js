@@ -1,10 +1,10 @@
-import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder } from 'discord.js';
+import { Client, GatewayIntentBits, REST, Routes, SlashCommandBuilder, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder } from 'discord.js';
 
 const TOKEN = process.env.DISCORD_BOT_TOKEN;
 const CLIENT_ID = process.env.DISCORD_CLIENT_ID;
 const REDIS_URL = process.env.KV_REST_API_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN;
-const SITE_URL = process.env.SITE_URL || 'https://rejeen.xyz';
+const SITE_URL = process.env.SITE_URL || 'https://www.rejeen.xyz';
 
 console.log('TOKEN present:', !!TOKEN, '| length:', TOKEN?.length);
 console.log('CLIENT_ID present:', !!CLIENT_ID);
@@ -60,44 +60,11 @@ async function redisKeys(pattern) {
 const commandRejeen = new SlashCommandBuilder()
   .setName('rejeen')
   .setDescription('Utwórz zamówienie dla klienta')
-  .addStringOption(opt =>
-    opt.setName('typ')
-      .setDescription('Typ zamówienia')
-      .setRequired(true)
-      .addChoices(
-        { name: '🎮 Rockstar', value: 'rockstar' },
-        { name: '🎮 Steam', value: 'steam' },
-        { name: '💬 Discord', value: 'discord' },
-      )
-  )
   .addUserOption(opt =>
     opt.setName('uzytkownik')
       .setDescription('Klient (@user)')
       .setRequired(true)
-  )
-  .addStringOption(opt => opt.setName('email1').setDescription('Rockstar/Steam: Email 1').setRequired(false))
-  .addStringOption(opt => opt.setName('haslo1').setDescription('Rockstar/Steam: Hasło 1').setRequired(false))
-  .addStringOption(opt => opt.setName('klucz1').setDescription('Rockstar: Klucz 2FA 1').setRequired(false))
-  .addStringOption(opt => opt.setName('email2').setDescription('Rockstar/Steam: Email 2').setRequired(false))
-  .addStringOption(opt => opt.setName('haslo2').setDescription('Rockstar/Steam: Hasło 2').setRequired(false))
-  .addStringOption(opt => opt.setName('klucz2').setDescription('Rockstar: Klucz 2FA 2').setRequired(false))
-  .addStringOption(opt => opt.setName('email3').setDescription('Rockstar/Steam: Email 3').setRequired(false))
-  .addStringOption(opt => opt.setName('haslo3').setDescription('Rockstar/Steam: Hasło 3').setRequired(false))
-  .addStringOption(opt => opt.setName('klucz3').setDescription('Rockstar: Klucz 2FA 3').setRequired(false))
-  .addStringOption(opt => opt.setName('email4').setDescription('Rockstar/Steam: Email 4').setRequired(false))
-  .addStringOption(opt => opt.setName('haslo4').setDescription('Rockstar/Steam: Hasło 4').setRequired(false))
-  .addStringOption(opt => opt.setName('klucz4').setDescription('Rockstar: Klucz 2FA 4').setRequired(false))
-  .addStringOption(opt => opt.setName('email5').setDescription('Rockstar/Steam: Email 5').setRequired(false))
-  .addStringOption(opt => opt.setName('haslo5').setDescription('Rockstar/Steam: Hasło 5').setRequired(false))
-  .addStringOption(opt => opt.setName('klucz5').setDescription('Rockstar: Klucz 2FA 5').setRequired(false))
-  .addStringOption(opt => opt.setName('token1').setDescription('Discord: Token 1').setRequired(false))
-  .addStringOption(opt => opt.setName('token2').setDescription('Discord: Token 2').setRequired(false))
-  .addStringOption(opt => opt.setName('token3').setDescription('Discord: Token 3').setRequired(false))
-  .addStringOption(opt => opt.setName('token4').setDescription('Discord: Token 4').setRequired(false))
-  .addStringOption(opt => opt.setName('token5').setDescription('Discord: Token 5').setRequired(false))
-  .addStringOption(opt => opt.setName('token6').setDescription('Discord: Token 6').setRequired(false))
-  .addStringOption(opt => opt.setName('token7').setDescription('Discord: Token 7').setRequired(false))
-  .addStringOption(opt => opt.setName('token8').setDescription('Discord: Token 8').setRequired(false));
+  );
 
 const commandUsun = new SlashCommandBuilder()
   .setName('usun')
@@ -142,110 +109,169 @@ client.once('ready', () => {
 });
 
 client.on('interactionCreate', async interaction => {
-  if (!interaction.isChatInputCommand()) return;
 
-  if (interaction.guildId !== process.env.DISCORD_GUILD_ID) {
-    return interaction.reply({ content: '❌ Bot działa tylko na oficjalnym serwerze.', ephemeral: true });
+  // ── Sprawdzenie uprawnień (dla komend slash) ───────────────────────────────
+  if (interaction.isChatInputCommand()) {
+    if (interaction.guildId !== process.env.DISCORD_GUILD_ID) {
+      return interaction.reply({ content: '❌ Bot działa tylko na oficjalnym serwerze.', ephemeral: true });
+    }
+    if (!interaction.member.roles.cache.has(process.env.DISCORD_ADMIN_ROLE_ID)) {
+      return interaction.reply({ content: '❌ Nie masz uprawnień do tej komendy.', ephemeral: true });
+    }
   }
 
-  const member = interaction.member;
-  if (!member.roles.cache.has(process.env.DISCORD_ADMIN_ROLE_ID)) {
-    return interaction.reply({ content: '❌ Nie masz uprawnień do tej komendy.', ephemeral: true });
-  }
-
-  // ── /rejeen ──────────────────────────────────────────────────────────────
-  if (interaction.commandName === 'rejeen') {
-    const typ = interaction.options.getString('typ');
+  // ── /rejeen — otwórz modal ────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'rejeen') {
     const user = interaction.options.getUser('uzytkownik');
-    const typeLabels = { rockstar: '🎮 Rockstar', steam: '🎮 Steam', discord: '💬 Discord' };
 
-    let orderData = {
-      typ,
-      userId: user.id,
-      username: user.username,
+    const modal = new ModalBuilder()
+      .setCustomId(`rejeen_modal_${user.id}_${user.username}`)
+      .setTitle(`Zamówienie dla ${user.username}`);
+
+    const rockstarInput = new TextInputBuilder()
+      .setCustomId('rockstar')
+      .setLabel('Rockstar — email:haslo:2fa (każde konto nowa linia)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('email@gmail.com:haslo123:klucz2fa\nemail2@gmail.com:haslo456:klucz2fa2')
+      .setRequired(false);
+
+    const steamInput = new TextInputBuilder()
+      .setCustomId('steam')
+      .setLabel('Steam — email:haslo (każde konto nowa linia)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('email@gmail.com:haslo123\nemail2@gmail.com:haslo456')
+      .setRequired(false);
+
+    const discordInput = new TextInputBuilder()
+      .setCustomId('discord')
+      .setLabel('Discord — tokeny (każdy token nowa linia)')
+      .setStyle(TextInputStyle.Paragraph)
+      .setPlaceholder('token1\ntoken2\ntoken3')
+      .setRequired(false);
+
+    modal.addComponents(
+      new ActionRowBuilder().addComponents(rockstarInput),
+      new ActionRowBuilder().addComponents(steamInput),
+      new ActionRowBuilder().addComponents(discordInput),
+    );
+
+    return interaction.showModal(modal);
+  }
+
+  // ── Modal submit ──────────────────────────────────────────────────────────
+  if (interaction.isModalSubmit() && interaction.customId.startsWith('rejeen_modal_')) {
+    await interaction.deferReply({ ephemeral: false });
+
+    const parts = interaction.customId.split('_');
+    const userId = parts[2];
+    const username = parts.slice(3).join('_');
+
+    const rockstarRaw = interaction.fields.getTextInputValue('rockstar').trim();
+    const steamRaw = interaction.fields.getTextInputValue('steam').trim();
+    const discordRaw = interaction.fields.getTextInputValue('discord').trim();
+
+    if (!rockstarRaw && !steamRaw && !discordRaw) {
+      return interaction.editReply({ content: '❌ Wypełnij przynajmniej jedno pole.' });
+    }
+
+    // Parsuj Rockstar
+    const rockstarKonta = [];
+    if (rockstarRaw) {
+      for (const line of rockstarRaw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const [email, haslo, klucz] = trimmed.split(':');
+        if (email && haslo && klucz) {
+          rockstarKonta.push({ email: email.trim(), haslo: haslo.trim(), klucz: klucz.trim() });
+        } else {
+          return interaction.editReply({ content: `❌ Błędny format Rockstar: \`${trimmed}\`\nPowinno być: email:haslo:2fa` });
+        }
+      }
+    }
+
+    // Parsuj Steam
+    const steamKonta = [];
+    if (steamRaw) {
+      for (const line of steamRaw.split('\n')) {
+        const trimmed = line.trim();
+        if (!trimmed) continue;
+        const [email, haslo] = trimmed.split(':');
+        if (email && haslo) {
+          steamKonta.push({ email: email.trim(), haslo: haslo.trim() });
+        } else {
+          return interaction.editReply({ content: `❌ Błędny format Steam: \`${trimmed}\`\nPowinno być: email:haslo` });
+        }
+      }
+    }
+
+    // Parsuj Discord tokeny
+    const discordTokeny = [];
+    if (discordRaw) {
+      for (const line of discordRaw.split('\n')) {
+        const trimmed = line.trim();
+        if (trimmed) discordTokeny.push(trimmed);
+      }
+    }
+
+    const orderData = {
+      userId,
+      username,
       createdBy: interaction.user.username,
       createdAt: new Date().toISOString(),
       expiresAt: new Date(Date.now() + EXPIRE_SECONDS * 1000).toISOString(),
+      ...(rockstarKonta.length > 0 && { rockstar: rockstarKonta }),
+      ...(steamKonta.length > 0 && { steam: steamKonta }),
+      ...(discordTokeny.length > 0 && { discord: discordTokeny }),
     };
-
-    if (typ === 'discord') {
-      const tokeny = [];
-      for (let i = 1; i <= 8; i++) {
-        const t = interaction.options.getString(`token${i}`);
-        if (t) tokeny.push(t);
-      }
-      if (tokeny.length === 0) {
-        return interaction.reply({ content: '❌ Podaj przynajmniej jeden token.', ephemeral: true });
-      }
-      orderData.tokeny = tokeny;
-
-    } else if (typ === 'rockstar') {
-      const konta = [];
-      for (let i = 1; i <= 5; i++) {
-        const email = interaction.options.getString(`email${i}`);
-        const haslo = interaction.options.getString(`haslo${i}`);
-        const klucz = interaction.options.getString(`klucz${i}`);
-        if (email && haslo && klucz) konta.push({ email, haslo, klucz });
-      }
-      if (konta.length === 0) {
-        return interaction.reply({ content: '❌ Podaj przynajmniej jedno konto (email + hasło + klucz 2FA).', ephemeral: true });
-      }
-      orderData.konta = konta;
-
-    } else if (typ === 'steam') {
-      const konta = [];
-      for (let i = 1; i <= 5; i++) {
-        const email = interaction.options.getString(`email${i}`);
-        const haslo = interaction.options.getString(`haslo${i}`);
-        if (email && haslo) konta.push({ email, haslo });
-      }
-      if (konta.length === 0) {
-        return interaction.reply({ content: '❌ Podaj przynajmniej jedno konto (email + hasło).', ephemeral: true });
-      }
-      orderData.konta = konta;
-    }
 
     const orderId = Date.now().toString();
     const orderUrl = `${SITE_URL}/customer/${orderId}`;
     await redisSet(`order:${orderId}`, orderData);
 
+    // Podsumowanie
+    const summary = [];
+    if (rockstarKonta.length > 0) summary.push(`🎮 Rockstar: ${rockstarKonta.length} konto/kont`);
+    if (steamKonta.length > 0) summary.push(`🎮 Steam: ${steamKonta.length} konto/kont`);
+    if (discordTokeny.length > 0) summary.push(`💬 Discord: ${discordTokeny.length} token/tokenów`);
+
     const channelEmbed = new EmbedBuilder()
       .setColor(0xc8ff00)
       .setTitle(`Zamówienie #${orderId}`)
-      .setDescription(`Zamówienie dla ${user} zostało utworzone.`)
+      .setDescription(`Zamówienie dla <@${userId}> zostało utworzone.`)
       .addFields(
-        { name: 'Typ', value: typeLabels[typ], inline: true },
-        { name: 'Klient', value: user.username, inline: true },
+        { name: 'Zawartość', value: summary.join('\n'), inline: false },
         { name: 'Link', value: orderUrl },
         { name: 'Wygasa', value: 'za 3 dni', inline: true },
       )
       .setFooter({ text: `Utworzone przez ${interaction.user.username}` })
       .setTimestamp();
 
-    await interaction.reply({ embeds: [channelEmbed] });
+    await interaction.editReply({ embeds: [channelEmbed] });
 
+    // DM do klienta
     try {
+      const user = await client.users.fetch(userId);
       const dmEmbed = new EmbedBuilder()
         .setColor(0x5865F2)
         .setTitle('Twoje zamówienie jest gotowe!')
-        .setDescription(`Hej ${user.username}! Twoje zamówienie w **REJEEN STORE** jest gotowe do odbioru.`)
+        .setDescription(`Hej ${username}! Twoje zamówienie w **REJEEN STORE** jest gotowe do odbioru.`)
         .addFields(
-          { name: 'Typ', value: typeLabels[typ], inline: true },
+          { name: 'Zawartość', value: summary.join('\n') },
           { name: 'Link do zamówienia', value: orderUrl },
           { name: '⚠️ Uwaga', value: 'Link wygasa za **3 dni**. Zaloguj się przez Discord aby zobaczyć dane.' },
         )
         .setTimestamp();
       await user.send({ embeds: [dmEmbed] });
-    } catch (e) {
+    } catch(e) {
       await interaction.followUp({
-        content: `⚠️ Nie mogłem wysłać DM do ${user} (zablokowane wiadomości). Link: ${orderUrl}`,
+        content: `⚠️ Nie mogłem wysłać DM do <@${userId}> (zablokowane wiadomości). Link: ${orderUrl}`,
         ephemeral: true,
       });
     }
   }
 
   // ── /usun ─────────────────────────────────────────────────────────────────
-  if (interaction.commandName === 'usun') {
+  if (interaction.isChatInputCommand() && interaction.commandName === 'usun') {
     const orderId = interaction.options.getString('orderid');
     const order = await redisGet(`order:${orderId}`);
 
@@ -258,7 +284,7 @@ client.on('interactionCreate', async interaction => {
   }
 
   // ── /zamowienia ───────────────────────────────────────────────────────────
-  if (interaction.commandName === 'zamowienia') {
+  if (interaction.isChatInputCommand() && interaction.commandName === 'zamowienia') {
     await interaction.deferReply({ ephemeral: true });
 
     const keys = await redisKeys('order:*');
@@ -267,9 +293,7 @@ client.on('interactionCreate', async interaction => {
       return interaction.editReply({ content: '📭 Brak aktywnych zamówień.' });
     }
 
-    const typeLabels = { rockstar: '🎮 Rockstar', steam: '🎮 Steam', discord: '💬 Discord' };
     const orders = [];
-
     for (const key of keys) {
       const order = await redisGet(key);
       if (order) {
@@ -280,19 +304,20 @@ client.on('interactionCreate', async interaction => {
 
     orders.sort((a, b) => b.orderId - a.orderId);
 
-    const embed = new EmbedBuilder()
-      .setColor(0xc8ff00)
-      .setTitle(`📦 Aktywne zamówienia (${orders.length})`)
-      .setTimestamp();
-
     const lines = orders.map(o => {
-      const typ = typeLabels[o.typ] || o.typ;
+      const parts = [];
+      if (o.rockstar) parts.push(`🎮R:${o.rockstar.length}`);
+      if (o.steam) parts.push(`🎮S:${o.steam.length}`);
+      if (o.discord) parts.push(`💬D:${o.discord.length}`);
+      // stary format
+      if (o.typ) parts.push({ rockstar: '🎮 Rockstar', steam: '🎮 Steam', discord: '💬 Discord' }[o.typ] || o.typ);
+
       const expiresAt = new Date(o.expiresAt);
       const diff = expiresAt - new Date();
       const daysLeft = Math.floor(diff / 1000 / 60 / 60 / 24);
       const hoursLeft = Math.floor(diff / 1000 / 60 / 60);
       const timeStr = daysLeft > 0 ? `${daysLeft}d` : `${hoursLeft}h`;
-      return `**#${o.orderId}** • ${typ} • <@${o.userId}> (${o.username}) • wygasa za ${timeStr}`;
+      return `**#${o.orderId}** • ${parts.join(' ')} • <@${o.userId}> (${o.username}) • za ${timeStr}`;
     });
 
     let current = '';
@@ -307,29 +332,39 @@ client.on('interactionCreate', async interaction => {
     }
     if (current) chunks.push(current);
 
-    embed.setDescription(chunks[0]);
+    const embed = new EmbedBuilder()
+      .setColor(0xc8ff00)
+      .setTitle(`📦 Aktywne zamówienia (${orders.length})`)
+      .setDescription(chunks[0])
+      .setTimestamp();
+
     return interaction.editReply({ embeds: [embed] });
   }
 
-if (interaction.commandName === 'comet') {
-  const code = interaction.options.getString('code');
+  // ── /comet ────────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'comet') {
+    const code = interaction.options.getString('code');
 
-  try {
-    const res = await fetch(`${SITE_URL}/api/comet`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-bot-secret': process.env.BOT_SECRET,
-      },
-      body: JSON.stringify({ code }),
-    });
+    try {
+      const res = await fetch(`${SITE_URL}/api/comet`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'x-bot-secret': process.env.BOT_SECRET,
+        },
+        body: JSON.stringify({ code }),
+      });
 
-    const data = await res.json();
-    return interaction.reply({ content: `Status: ${res.status} | Odpowiedź: ${JSON.stringify(data)} | SITE_URL: ${SITE_URL}`, ephemeral: true });
-  } catch(e) {
-    return interaction.reply({ content: `❌ Błąd fetch: ${e.message} | SITE_URL: ${SITE_URL}`, ephemeral: true });
+      if (res.ok) {
+        return interaction.reply({ content: `✅ Kod comet.lua zaktualizowany na: \`${code}\``, ephemeral: true });
+      } else {
+        const data = await res.json();
+        return interaction.reply({ content: `❌ Błąd: ${JSON.stringify(data)}`, ephemeral: true });
+      }
+    } catch(e) {
+      return interaction.reply({ content: `❌ Błąd fetch: ${e.message}`, ephemeral: true });
+    }
   }
-}
 });
 
 await registerCommand();
