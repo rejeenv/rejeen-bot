@@ -88,13 +88,17 @@ const commandComet = new SlashCommandBuilder()
       .setRequired(true)
   );
 
+const commandTeststat = new SlashCommandBuilder()
+  .setName('teststat')
+  .setDescription('Testuj endpoint statystyk');
+
 const rest = new REST({ version: '10' }).setToken(TOKEN);
 
 async function registerCommand() {
   try {
     await rest.put(
       Routes.applicationGuildCommands(CLIENT_ID, process.env.DISCORD_GUILD_ID),
-      { body: [commandRejeen.toJSON(), commandUsun.toJSON(), commandZamowienia.toJSON(), commandComet.toJSON()] }
+      { body: [commandRejeen.toJSON(), commandUsun.toJSON(), commandZamowienia.toJSON(), commandComet.toJSON(), commandTeststat.toJSON()] }
     );
     console.log('✅ Komendy zarejestrowane');
   } catch (err) {
@@ -110,7 +114,6 @@ client.once('ready', () => {
 
 client.on('interactionCreate', async interaction => {
 
-  // ── Sprawdzenie uprawnień (dla komend slash) ───────────────────────────────
   if (interaction.isChatInputCommand()) {
     if (interaction.guildId !== process.env.DISCORD_GUILD_ID) {
       return interaction.reply({ content: '❌ Bot działa tylko na oficjalnym serwerze.', ephemeral: true });
@@ -120,7 +123,7 @@ client.on('interactionCreate', async interaction => {
     }
   }
 
-  // ── /rejeen — otwórz modal ────────────────────────────────────────────────
+  // ── /rejeen ───────────────────────────────────────────────────────────────
   if (interaction.isChatInputCommand() && interaction.commandName === 'rejeen') {
     const user = interaction.options.getUser('uzytkownik');
 
@@ -128,7 +131,7 @@ client.on('interactionCreate', async interaction => {
       .setCustomId(`rejeen_modal_${user.id}_${user.username}`)
       .setTitle(`Zamówienie dla ${user.username}`);
 
-const rockstarInput = new TextInputBuilder()
+    const rockstarInput = new TextInputBuilder()
       .setCustomId('rockstar')
       .setLabel('Rockstar: email:haslo:2fa')
       .setStyle(TextInputStyle.Paragraph)
@@ -174,7 +177,6 @@ const rockstarInput = new TextInputBuilder()
       return interaction.editReply({ content: '❌ Wypełnij przynajmniej jedno pole.' });
     }
 
-    // Parsuj Rockstar
     const rockstarKonta = [];
     if (rockstarRaw) {
       for (const line of rockstarRaw.split('\n')) {
@@ -189,7 +191,6 @@ const rockstarInput = new TextInputBuilder()
       }
     }
 
-    // Parsuj Steam
     const steamKonta = [];
     if (steamRaw) {
       for (const line of steamRaw.split('\n')) {
@@ -204,7 +205,6 @@ const rockstarInput = new TextInputBuilder()
       }
     }
 
-    // Parsuj Discord tokeny
     const discordTokeny = [];
     if (discordRaw) {
       for (const line of discordRaw.split('\n')) {
@@ -228,7 +228,6 @@ const rockstarInput = new TextInputBuilder()
     const orderUrl = `${SITE_URL}/customer/${orderId}`;
     await redisSet(`order:${orderId}`, orderData);
 
-    // Podsumowanie
     const summary = [];
     if (rockstarKonta.length > 0) summary.push(`🎮 Rockstar: ${rockstarKonta.length} konto/kont`);
     if (steamKonta.length > 0) summary.push(`🎮 Steam: ${steamKonta.length} konto/kont`);
@@ -248,7 +247,6 @@ const rockstarInput = new TextInputBuilder()
 
     await interaction.editReply({ embeds: [channelEmbed] });
 
-    // DM do klienta
     try {
       const user = await client.users.fetch(userId);
       const dmEmbed = new EmbedBuilder()
@@ -309,7 +307,6 @@ const rockstarInput = new TextInputBuilder()
       if (o.rockstar) parts.push(`🎮R:${o.rockstar.length}`);
       if (o.steam) parts.push(`🎮S:${o.steam.length}`);
       if (o.discord) parts.push(`💬D:${o.discord.length}`);
-      // stary format
       if (o.typ) parts.push({ rockstar: '🎮 Rockstar', steam: '🎮 Steam', discord: '💬 Discord' }[o.typ] || o.typ);
 
       const expiresAt = new Date(o.expiresAt);
@@ -363,6 +360,21 @@ const rockstarInput = new TextInputBuilder()
       }
     } catch(e) {
       return interaction.reply({ content: `❌ Błąd fetch: ${e.message}`, ephemeral: true });
+    }
+  }
+
+  // ── /teststat ─────────────────────────────────────────────────────────────
+  if (interaction.isChatInputCommand() && interaction.commandName === 'teststat') {
+    try {
+      const res = await fetch(`${SITE_URL}/api/stats`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ secret: process.env.BOT_SECRET, event: 'launch' }),
+      });
+      const data = await res.json();
+      return interaction.reply({ content: `Status: ${res.status} | Odpowiedź: ${JSON.stringify(data)} | SITE_URL: ${SITE_URL} | BOT_SECRET present: ${!!process.env.BOT_SECRET}`, ephemeral: true });
+    } catch(e) {
+      return interaction.reply({ content: `❌ Błąd: ${e.message}`, ephemeral: true });
     }
   }
 });
