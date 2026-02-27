@@ -229,16 +229,12 @@ client.on('interactionCreate', async interaction => {
     await redisSet(`order:${orderId}`, orderData);
 
     const summary = [];
-    if (rockstarKonta.length > 0) summary.push(`🎮 Rockstar: ${rockstarKonta.length} konto/kont`);
-    if (steamKonta.length > 0) summary.push(`🎮 Steam: ${steamKonta.length} konto/kont`);
-    if (discordTokeny.length > 0) summary.push(`💬 Discord: ${discordTokeny.length} token/tokenów`);
 
     const channelEmbed = new EmbedBuilder()
       .setColor(0xc8ff00)
       .setTitle(`Zamówienie #${orderId}`)
       .setDescription(`Zamówienie dla <@${userId}> zostało utworzone.`)
       .addFields(
-        { name: 'Zawartość', value: summary.join('\n'), inline: false },
         { name: 'Link', value: orderUrl },
         { name: 'Wygasa', value: 'za 3 dni', inline: true },
       )
